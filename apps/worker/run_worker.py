@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 
 from apps.worker.core.config import load_environment
+from apps.worker.services.document_chunking.worker import run_worker as run_document_chunking_worker
 from apps.worker.services.image_chunking.worker import run_worker as run_image_chunking_worker
 
 
 SERVICE_WORKERS = {
+    "document-chunking": run_document_chunking_worker,
     "image-chunking": run_image_chunking_worker,
 }
 
