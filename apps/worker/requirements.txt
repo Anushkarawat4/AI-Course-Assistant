@@ -14,6 +14,7 @@ pytesseract==0.3.13
 python-docx>=1.1.0
 python-dotenv==1.0.1
 python-pptx>=0.6.23
+rank-bm25==0.2.2
 redis==5.0.8
 rq==1.16.2
 unstructured[all-docs]>=0.14.0

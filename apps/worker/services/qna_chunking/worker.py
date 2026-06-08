@@ -35,16 +35,12 @@ def get_service_queue() -> Queue:
 def enqueue_job(
     file_paths: list[str],
     course_id: str,
-    semantic_threshold: float = 0.45,
-    max_chunk_tokens: int = 800,
 ) -> Job:
     settings = get_queue_settings()
     queue = get_service_queue()
     kwargs = {
         "file_paths": file_paths,
         "course_id": course_id,
-        "semantic_threshold": semantic_threshold,
-        "max_chunk_tokens": max_chunk_tokens,
     }
     return queue.enqueue(
         JOB_FUNCTION,

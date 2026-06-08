@@ -30,7 +30,10 @@ def load_env_file(path: Path) -> None:
 
     sanitized_lines = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        if line.lstrip().startswith("//"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("//", "#")):
+            continue
+        if "=" not in stripped:
             continue
         sanitized_lines.append(line)
 

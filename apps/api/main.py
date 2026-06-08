@@ -13,6 +13,7 @@ from apps.worker.core.config import load_environment
 
 load_environment("api")
 
+from routes.agentic_retrieval import router as agentic_retrieval_router
 from routes.audio_chunking_jobs import router as audio_chunking_jobs_router
 from routes.document_chunking_jobs import router as document_chunking_jobs_router
 from routes.handwritten_chunking_jobs import router as handwritten_chunking_jobs_router
@@ -28,6 +29,7 @@ except ImportError:
 
 app = FastAPI(title="AI Course Assistant API")
 
+app.include_router(agentic_retrieval_router)
 app.include_router(audio_chunking_jobs_router)
 app.include_router(document_chunking_jobs_router)
 app.include_router(handwritten_chunking_jobs_router)

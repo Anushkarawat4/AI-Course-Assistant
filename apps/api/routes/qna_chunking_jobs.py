@@ -28,8 +28,6 @@ class QnAChunkingJobRequest(BaseModel):
 
     file_paths: list[str] = Field(..., min_length=1, description="Paths to QnA PDF/DOCX/PPTX files")
     course_id: str = Field(..., min_length=1, description="Course identifier used to select the Pinecone index")
-    semantic_threshold: float = Field(0.45, ge=0.0, le=1.0)
-    max_chunk_tokens: int = Field(800, ge=100, le=4000)
 
 
 router = APIRouter(prefix="/qna-chunking/jobs", tags=["qna-chunking-jobs"])
@@ -60,8 +58,6 @@ def enqueue_job(request: QnAChunkingJobRequest) -> dict:
         job = enqueue_qna_chunking_job(
             file_paths=[str(path) for path in paths],
             course_id=request.course_id,
-            semantic_threshold=request.semantic_threshold,
-            max_chunk_tokens=request.max_chunk_tokens,
         )
     except RedisError as exc:
         raise HTTPException(status_code=503, detail=f"Could not connect to Redis/RQ: {exc}") from exc

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from redis.exceptions import RedisError
 from rq.job import Job
 
@@ -28,30 +28,7 @@ class YouTubeChunkingJobRequest(BaseModel):
     url: str = Field(..., min_length=1)
     course_id: str = Field(..., min_length=1)
     course_name: str = ""
-    instructor: str = ""
-    semester: str = ""
     subject: str = ""
-    tags: list[str] = Field(default_factory=list)
-    languages: list[str] = Field(default_factory=lambda: ["en"])
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def _normalize_tags(cls, value):
-        if value in (None, "", "string"):
-            return []
-        if isinstance(value, list):
-            return [item for item in value if item and item != "string"]
-        return value
-
-    @field_validator("languages", mode="before")
-    @classmethod
-    def _normalize_languages(cls, value):
-        if value in (None, "", "string"):
-            return ["en"]
-        if isinstance(value, list):
-            cleaned = [item for item in value if item and item != "string"]
-            return cleaned or ["en"]
-        return value
 
 
 router = APIRouter(prefix="/youtube-chunking/jobs", tags=["youtube-chunking-jobs"])
@@ -59,7 +36,13 @@ router = APIRouter(prefix="/youtube-chunking/jobs", tags=["youtube-chunking-jobs
 
 def enqueue_job(request: YouTubeChunkingJobRequest) -> dict:
     try:
-        job = enqueue_youtube_chunking_job(**request.model_dump())
+        job = enqueue_youtube_chunking_job(
+            **request.model_dump(),
+            instructor="",
+            semester="",
+            tags=[],
+            languages=["en"],
+        )
     except RedisError as exc:
         raise HTTPException(status_code=503, detail=f"Could not connect to Redis/RQ: {exc}") from exc
     return serialize_job(job)
