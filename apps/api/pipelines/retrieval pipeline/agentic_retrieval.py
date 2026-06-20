@@ -484,6 +484,8 @@ class RetrievalResult:
     total_candidates: int
     latency_ms:       float
     source_breakdown: dict[str, int] = field(default_factory=dict)
+    cache_hit:        bool = False          # True when served from Redis
+    cache_similarity: float = 0.0          # cosine similarity of the hit
 
     def to_context_string(self, max_chunks: Optional[int] = None) -> str:
         selected = self.chunks[:max_chunks] if max_chunks else self.chunks
@@ -1261,6 +1263,94 @@ def retrieve(
     t_start = time.perf_counter()
     target_index_name = index_name or get_course_index_name(course_id)
 
+    # ── 0. Redis semantic cache lookup ─────────────────────────────────────
+    try:
+        from cache.retrieval_cache import lookup as _cache_lookup, store as _cache_store
+        _cache_available = True
+    except Exception:
+        _cache_available = False
+        _cache_lookup = _cache_store = None  # type: ignore[assignment]
+
+    if _cache_available and _cache_lookup:
+        if verbose:
+            print(f"[0/5] Redis cache lookup  course={course_id}  mode={mode.value} ...")
+        _cached = _cache_lookup(
+            query=query,
+            course_id=course_id,
+            mode=mode.value,
+            top_k=top_k,
+        )
+        if _cached is not None:
+            _cached_chunks: list[RetrievedChunk] = []
+            for _cd in _cached.get("chunks", []):
+                try:
+                    _cached_chunks.append(RetrievedChunk(
+                        chunk_id          = _cd.get("chunk_id", ""),
+                        source_key        = _cd.get("source_key", ""),
+                        namespace         = _cd.get("namespace", ""),
+                        score             = float(_cd.get("score", 0.0)),
+                        rrf_score         = float(_cd.get("rrf_score", 0.0)),
+                        retrieval_methods = _cd.get("retrieval_methods", ["cache"]),
+                        text              = _cd.get("text", _cd.get("display_text", "")),
+                        source_file       = _cd.get("source_file", ""),
+                        course_id         = _cd.get("course_id", course_id),
+                        page_range        = _cd.get("page_range", ""),
+                        section_title     = _cd.get("section_title", ""),
+                        topic             = _cd.get("topic", ""),
+                        chunk_type        = _cd.get("chunk_type", ""),
+                        keywords          = _cd.get("keywords", []),
+                        year_hint         = _cd.get("year_hint"),
+                        marks_hint        = _cd.get("marks_hint"),
+                        image_type        = _cd.get("image_type", ""),
+                        image_summary     = _cd.get("image_summary", ""),
+                        start_label       = _cd.get("start_label", ""),
+                        end_label         = _cd.get("end_label", ""),
+                        lecture_title     = _cd.get("lecture_title", ""),
+                        professor         = _cd.get("professor", ""),
+                        video_title       = _cd.get("video_title", ""),
+                        deep_link         = _cd.get("deep_link", ""),
+                        chapter_title     = _cd.get("chapter_title", ""),
+                        has_equations     = bool(_cd.get("has_equations", False)),
+                        has_diagrams      = bool(_cd.get("has_diagrams", False)),
+                        has_table         = bool(_cd.get("has_table", False)),
+                    ))
+                except Exception as _e:
+                    logger.warning("Skipping malformed cached chunk: %s", _e)
+            try:
+                _cached_plan = QueryPlan.model_validate(_cached["plan"])
+            except Exception:
+                _cached_plan = QueryPlan(
+                    query_intent="(from cache)",
+                    query_category="general",
+                    complexity_level="standard",
+                    sub_queries=[SubQuery(text=query, facet="main", preferred_sources=[])],
+                    source_budgets=[],
+                    key_concepts=[],
+                    domain_keywords=[],
+                    high_value_signals=[],
+                    low_value_signals=[],
+                    expected_answer_format="prose",
+                    expected_answer_length="medium",
+                )
+            _hit_ms = (time.perf_counter() - t_start) * 1000
+            if verbose:
+                print(
+                    f"   Cache HIT ({_cached.get('hit_type','?')})  "
+                    f"similarity={_cached.get('similarity', 1.0):.3f}  "
+                    f"chunks={len(_cached_chunks)}  latency={_hit_ms:.0f} ms"
+                )
+            return RetrievalResult(
+                query            = query,
+                mode             = mode,
+                plan             = _cached_plan,
+                chunks           = _cached_chunks,
+                total_candidates = _cached.get("total_candidates", len(_cached_chunks)),
+                latency_ms       = _hit_ms,
+                source_breakdown = _cached.get("source_breakdown", {}),
+                cache_hit        = True,
+                cache_similarity = float(_cached.get("similarity", 1.0)),
+            )
+
     # ── 1. Planner ─────────────────────────────────────────────────────────
     if verbose:
         print(f"\n{'='*65}")
@@ -1427,7 +1517,7 @@ def retrieve(
         for i, c in enumerate(final_chunks, 1):
             print(f"   [{i}] {c.score:.3f}  [{c.source_key}]  {c.citation_label[:55]}")
 
-    return RetrievalResult(
+    _result = RetrievalResult(
         query            = query,
         mode             = mode,
         plan             = plan,
@@ -1435,7 +1525,28 @@ def retrieve(
         total_candidates = total_candidates,
         latency_ms       = latency_ms,
         source_breakdown = source_breakdown,
+        cache_hit        = False,
+        cache_similarity = 0.0,
     )
+
+    # ── 6. Store in Redis cache (non-fatal if Redis is down) ──────────────────
+    if _cache_available and _cache_store and final_chunks:
+        try:
+            _cache_store(
+                query            = query,
+                course_id        = course_id,
+                mode             = mode.value,
+                top_k            = top_k,
+                chunks           = final_chunks,
+                plan             = plan,
+                source_breakdown = source_breakdown,
+                total_candidates = total_candidates,
+                latency_ms       = latency_ms,
+            )
+        except Exception as _ce:
+            logger.warning("Cache store failed (non-fatal): %s", _ce)
+
+    return _result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
