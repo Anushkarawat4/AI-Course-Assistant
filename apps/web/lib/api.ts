@@ -69,8 +69,27 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail ?? "Request failed");
+  const payload = await response.json().catch(() => ({}));
+
+  let message = "Request failed";
+
+  if (typeof payload.detail === "string") {
+    message = payload.detail;
+  } else if (
+    Array.isArray(payload.detail) &&
+    payload.detail.length > 0
+  ) {
+    const msg = payload.detail[0].msg;
+
+    if (msg.includes("at least 8 characters")) {
+      message =
+        "Password must be at least 8 characters long";
+    } else {
+      message = msg;
+    }
   }
+
+  throw new Error(message);
+}
   return response.json() as Promise<T>;
 }

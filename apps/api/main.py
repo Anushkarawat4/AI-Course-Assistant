@@ -1,6 +1,9 @@
 from __future__ import annotations
-
+from fastapi.middleware.cors import CORSMiddleware
 import sys
+from app.routers import auth
+
+
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -39,7 +42,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(auth.router)
+print("AUTH ROUTER REGISTERED")
 app.include_router(agentic_retrieval_router)
 app.include_router(audio_chunking_jobs_router)
 app.include_router(document_chunking_jobs_router)

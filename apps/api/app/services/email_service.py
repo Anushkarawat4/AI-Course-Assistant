@@ -5,8 +5,8 @@ from email.mime.text import MIMEText
 
 
 def send_otp_email(email: str, otp: str):
-    sender = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
+    sender = os.getenv("SMTP_EMAIL")
+    password = os.getenv("SMTP_PASSWORD")
 
     msg = MIMEText(
         f"Your CourseGPT OTP is: {otp}"
