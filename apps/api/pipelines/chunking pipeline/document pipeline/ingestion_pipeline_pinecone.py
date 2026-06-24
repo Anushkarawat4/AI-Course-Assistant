@@ -206,16 +206,59 @@ def _get_metadata_value(el, *names: str):
 
 
 def _extract_image_payload(el) -> tuple[bytes, str] | None:
+    metadata = getattr(el, "metadata", None)
+    if metadata is None:
+        return None
+
+    # Priority 1: image_path on disk (unstructured >= 0.13 with hi_res)
+    image_path = _get_metadata_value(el, "image_path")
+    if image_path:
+        try:
+            img_p = Path(str(image_path))
+            if img_p.exists():
+                img_bytes = img_p.read_bytes()
+                suffix = img_p.suffix.lower().lstrip(".")
+                mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                            "png": "image/png",  "gif": "image/gif",
+                            "webp": "image/webp", "tiff": "image/tiff"}
+                mime = mime_map.get(suffix, "image/png")
+                print(f"   ✅  Image loaded from disk: {img_p.name}  {len(img_bytes)} bytes  mime={mime}")
+                return img_bytes, mime
+            else:
+                print(f"   ⚠️  image_path attribute found but file does not exist: {image_path}")
+        except Exception as e:
+            print(f"   ⚠️  Failed to read image from disk '{image_path}': {e}")
+
+    # Debug: print all metadata keys so we can identify what the installed
+    # version of unstructured actually stores
+    if hasattr(metadata, "to_dict"):
+        all_keys = list(metadata.to_dict().keys())
+        img_keys = [k for k in all_keys if "image" in k.lower() or "base64" in k.lower() or "figure" in k.lower()]
+        if img_keys:
+            print(f"   🔍 Potential image keys in metadata: {img_keys}")
+        else:
+            print(f"   ⚠️  No image/base64 keys found. All metadata keys: {all_keys}")
+
+    # Priority 2: Check for base64 (legacy Unstructured)
     raw_payload = _get_metadata_value(
         el,
         "image_base64",
         "image_base64_data",
+        # older versions
         "image_payload",
+        # additional fallback names
+        "base64_image",
+        "image_data",
     )
+
     if not raw_payload:
+        print("   ⚠️  Image payload not found via image_path or any base64 attribute.")
         return None
 
-    mime_type = _get_metadata_value(el, "image_mime_type", "mime_type") or "image/png"
+    mime_type = _get_metadata_value(
+        el, "image_mime_type", "mime_type", "image_type"
+    ) or "image/png"
+
     payload = str(raw_payload)
     if "," in payload and payload.lower().startswith("data:"):
         header, payload = payload.split(",", 1)
@@ -223,8 +266,11 @@ def _extract_image_payload(el) -> tuple[bytes, str] | None:
             mime_type = header[5:].split(";", 1)[0] or mime_type
 
     try:
-        return base64.b64decode(payload), mime_type
-    except Exception:
+        decoded = base64.b64decode(payload)
+        print(f"   ✅  Image payload decoded: {len(decoded)} bytes, mime: {mime_type}")
+        return decoded, mime_type
+    except Exception as e:
+        print(f"   ⚠️  base64 decode failed: {e}")
         return None
 
 
@@ -298,6 +344,8 @@ def partition_document(file_path: str) -> list:
         pdf_strategy = "hi_res" if use_hi_res else "fast"
         print(f"   PDF strategy: {pdf_strategy} (ENABLE_IMAGE_SUMMARIES={ENABLE_IMAGE_SUMMARIES}, PDF_USE_HI_RES_FOR_IMAGES={PDF_USE_HI_RES_FOR_IMAGES})")
         kwargs.update(strategy=pdf_strategy)
+        if use_hi_res:
+            kwargs.update(extract_images_in_pdf=True)
     elif ext in {".pptx", ".ppt"}:
         kwargs.update(include_page_breaks=True)
     elif ext in {".docx", ".doc"}:
@@ -316,6 +364,21 @@ def partition_document(file_path: str) -> list:
         raise ValueError(f"Unsupported file type: {ext}")
     print(f"   ✅  {len(elements)} elements extracted")
     return elements
+
+
+def _cleanup_figures_dir(figures_dir: Path | None = None) -> None:
+    """
+    Delete the figures/ temp directory that unstructured creates when
+    extract_images_in_pdf=True.  Must be called AFTER build_documents()
+    has finished reading image bytes — not before.
+
+    Safe to call even if the directory does not exist.
+    """
+    import shutil
+    target = figures_dir or (Path.cwd() / "figures")
+    if target.exists() and target.is_dir():
+        shutil.rmtree(target, ignore_errors=True)
+        print(f"   🗑️   Cleaned up temp figures dir: {target}")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -426,6 +489,8 @@ def build_documents(
                             )
                         except Exception as exc:
                             print(f"   ⚠️  Image summary failed: {exc}")
+                else:
+                    print(f"   ⚠️  Image {image_count} skipped — no base64 payload found")
 
             # List items
             elif kind in {"ListItem", "List"}:
@@ -766,6 +831,11 @@ def run_pipeline(
         except Exception as exc:
             print(f"\n❌ Failed to process '{fp}': {exc}")
             failures.append(f"{fp}: {exc}")
+        finally:
+            # Clean up figures/ temp dir created by unstructured hi_res strategy.
+            # Must run AFTER build_documents() has read all image bytes.
+            if fp.lower().endswith(".pdf"):
+                _cleanup_figures_dir()
             continue
 
     if not all_docs:
