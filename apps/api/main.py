@@ -77,3 +77,11 @@ app.include_router(retrieval_cache_router)
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+@app.get("/")
+def root():
+    return {
+        "message": "CourseGPT API is running",
+        "docs": "/docs",
+        "health": "/health"
+    }
