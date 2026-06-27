@@ -37,7 +37,12 @@ Icon: Brain,
 ];
 
 export default function Home() {
-const [user, setUser] = useState<any>(null);
+type User = {
+  name: string;
+  role: "teacher" | "student";
+};
+
+const [user, setUser] = useState<User | null>(null);
 
 useEffect(() => {
 setUser(getStoredUser());
@@ -182,7 +187,7 @@ CG </div>
             </p>
 
             <p className="mt-2 text-sm">
-              Summarize Rachel Carson's
+              Summarize Rachel Carson&apos;s
               contribution to environmental
               science.
             </p>

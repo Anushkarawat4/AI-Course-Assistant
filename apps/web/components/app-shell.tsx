@@ -40,7 +40,12 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
+  type User = {
+  name: string;
+  role: "teacher" | "student";
+};
+
+const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     setUser(getStoredUser());

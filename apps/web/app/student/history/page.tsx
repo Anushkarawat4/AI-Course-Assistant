@@ -11,13 +11,13 @@ import { AppShell } from "@/components/app-shell";
 import { CourseSelect } from "@/components/course-select";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { api, type Source } from "@/lib/api";
 
 type HistoryItem = {
   id: string;
   message: string;
   response: string;
-  sources?: any[];
+  sources?: Source[];
 };
 
 export default function HistoryPage() {
@@ -176,7 +176,7 @@ export default function HistoryPage() {
                           <div className="flex flex-wrap gap-2">
                             {chat.sources.map(
                               (
-                                source: any,
+                                source: Source,
                                 index: number
                               ) => (
                                 <div

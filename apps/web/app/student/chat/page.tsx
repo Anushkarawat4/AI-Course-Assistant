@@ -6,7 +6,6 @@ import { Send } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CourseSelect } from "@/components/course-select";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { api, type Source } from "@/lib/api";
 
