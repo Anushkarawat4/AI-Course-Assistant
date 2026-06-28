@@ -1,33 +1,34 @@
 import os
-import smtplib
 
-from email.mime.text import MIMEText
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
 
 def send_otp_email(email: str, otp: str):
-    sender = os.getenv("SMTP_EMAIL")
-    password = os.getenv("SMTP_PASSWORD")
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key["api-key"] = os.getenv("BREVO_API_KEY")
 
-    msg = MIMEText(
-        f"Your CourseGPT OTP is: {otp}"
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+        sib_api_v3_sdk.ApiClient(configuration)
     )
 
-    msg["Subject"] = "CourseGPT OTP"
-    msg["From"] = sender
-    msg["To"] = email
-
-    server = smtplib.SMTP(
-        "smtp.gmail.com",
-        587
+    send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+        sender={
+            "name": "CourseGPT",
+            "email": "anukhu12@gmail.com",   # Your verified sender
+        },
+        to=[
+            {
+                "email": email
+            }
+        ],
+        subject="CourseGPT OTP",
+        text_content=f"Your CourseGPT OTP is: {otp}",
     )
 
-    server.starttls()
-
-    server.login(
-        sender,
-        password
-    )
-
-    server.send_message(msg)
-
-    server.quit()
+    try:
+        response = api_instance.send_transac_email(send_smtp_email)
+        print("Email sent:", response)
+    except ApiException as e:
+        print("Brevo Error:", e)
+        raise
